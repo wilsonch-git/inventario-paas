@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    h1 { margin-bottom: 0; }
+    .env { color: #666; font-size: .85rem; margin-top: .25rem; }
+    form { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1.5rem 0; }
+    input { padding: .5rem; border: 1px solid #bbb; border-radius: 6px; }
+    input[name=nombre] { flex: 2; min-width: 160px; }
+    input[type=number] { flex: 1; min-width: 90px; }
+    button { padding: .5rem .9rem; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; }
+    button.sec { background: #64748b; }
+    button.del { background: #dc2626; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #ddd; }
+    #msg { color: #b91c1c; min-height: 1.2rem; }
+  </style>
+</head>
+<body>
+  <h1>{{ app_name }}</h1>
+  <p class="env">Entorno: {{ app_env }}</p>
+
+  <form id="form">
+    <input type="hidden" name="id">
+    <input name="nombre" placeholder="Nombre del producto" required>
+    <input name="cantidad" type="number" min="0" step="1" placeholder="Cantidad" required>
+    <input name="precio" type="number" min="0" step="0.01" placeholder="Precio" required>
+    <button type="submit" id="guardar">Agregar</button>
+    <button type="button" class="sec" id="cancelar" hidden>Cancelar</button>
+  </form>
+  <div id="msg"></div>
+
+  <table>
+    <thead><tr><th>ID</th><th>Producto</th><th>Cantidad</th><th>Precio</th><th></th></tr></thead>
+    <tbody id="lista"></tbody>
+  </table>
+
+  <script>
+    const form = document.getElementById("form");
+    const lista = document.getElementById("lista");
+    const msg = document.getElementById("msg");
+    const cancelar = document.getElementById("cancelar");
+
+    async function api(url, opciones) {
+      const r = await fetch(url, opciones);
+      if (r.status === 204) return null;
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Error");
+      return data;
+    }
+
+    function celda(texto) {
+      const td = document.createElement("td");
+      td.textContent = texto;   // textContent evita inyección de HTML
+      return td;
+    }
+
+    async function cargar() {
+      const productos = await api("/api/productos");
+      lista.replaceChildren();
+      for (const p of productos) {
+        const tr = document.createElement("tr");
+        tr.append(celda(p.id), celda(p.nombre), celda(p.cantidad), celda(p.precio.toFixed(2)));
+        const acciones = document.createElement("td");
+        const bEd = document.createElement("button");
+        bEd.textContent = "Editar";
+        bEd.className = "sec";
+        bEd.onclick = () => editar(p);
+        const bDel = document.createElement("button");
+        bDel.textContent = "Eliminar";
+        bDel.className = "del";
+        bDel.onclick = () => eliminar(p.id);
+        acciones.append(bEd, " ", bDel);
+        tr.append(acciones);
+        lista.append(tr);
+      }
+    }
+
+    function editar(p) {
+      form.id.value = p.id;
+      form.nombre.value = p.nombre;
+      form.cantidad.value = p.cantidad;
+      form.precio.value = p.precio;
+      document.getElementById("guardar").textContent = "Actualizar";
+      cancelar.hidden = false;
+    }
+
+    function limpiar() {
+      form.reset();
+      form.id.value = "";
+      document.getElementById("guardar").textContent = "Agregar";
+      cancelar.hidden = true;
+    }
+
+    async function eliminar(id) {
+      if (!confirm("¿Eliminar este producto?")) return;
+      await api("/api/productos/" + id, { method: "DELETE" });
+      cargar();
+    }
+
+    cancelar.onclick = limpiar;
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      msg.textContent = "";
+      const cuerpo = {
+        nombre: form.nombre.value,
+        cantidad: form.cantidad.value,
+        precio: form.precio.value,
+      };
+      const id = form.id.value;
+      try {
+        await api(id ? "/api/productos/" + id : "/api/productos", {
+          method: id ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cuerpo),
+        });
+        limpiar();
+        cargar();
+      } catch (err) {
+        msg.textContent = err.message;
+      }
+    };
+
+    cargar();
+  </script>
+</body>
+</html>
